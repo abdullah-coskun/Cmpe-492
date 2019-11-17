@@ -1,1 +1,13 @@
 Notebooks/ipynb_checkpoints
+django_project/classify_api/venv
+
+/*__pycache__
+__pycache__
+__pycache__/*
+*.sqlite3
+
+.DS_Store
+./.DS_Store
+.idea
+
+venv
