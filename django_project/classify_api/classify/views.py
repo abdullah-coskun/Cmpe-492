@@ -367,6 +367,7 @@ class ClassifyAPIView(APIView):
 
         feature_sets = []
         feature_set=request.data.get('feature_set',None)
+        type = request.data.get('type', None)
         if feature_set is None:
             #raise ValidationError("You have to give feature set")
             feature_set='FinalSel'
@@ -376,6 +377,7 @@ class ClassifyAPIView(APIView):
         # classify all datasets with all possible feature sets and for all target class.
         # print the results and the plots
         return_value=[]
+        return_test_value = []
         data_all = pd.read_csv(request.data['file'])
         for feature_set in feature_sets:
             for target in targets:
@@ -481,6 +483,7 @@ class ClassifyAPIView(APIView):
 
                 print("Feature set '" + feature_set + "' Target '" + target + "' ========")
                 return_value.append(svm_te)
+                return_test_value.append({target:res})
                 # display the results in the form of tables precision recall f1 auc, plots
                 #build_plot(y_true=golds, scores=probs, labels=names)
                 make_roc_curve(appendix, target, to_drop, golds, probs, names, auc_scores, '', colors)
@@ -496,6 +499,8 @@ class ClassifyAPIView(APIView):
             #print('Done Inner')
 
         #print('Done')
+        if type == 'test':
+            return Response(return_test_value, status=200)
         writer.writerows(zip(return_value[0], return_value[1],return_value[2],return_value[3]))
         f.close()
         f = open("results.csv", "r")
