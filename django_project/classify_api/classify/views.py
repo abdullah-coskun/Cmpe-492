@@ -20,18 +20,24 @@ from rest_framework.views import APIView
 from sklearn.model_selection import train_test_split
 from sklearn.datasets import load_breast_cancer, load_iris
 from rest_framework.response import Response
+from django.http import HttpResponse
+from rest_framework.exceptions import ValidationError
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
+import os
 from scipy import interp
 
 import numpy as np
 import pandas as pd
+import csv
 
 from skrules import SkopeRules
 
 # Set the ipython display in such a way that helps the visualization of the rulematrix outputs.
 from IPython.display import display, HTML
+
+from classify.send_email import send_email_results
 
 display(HTML(data="""
 <style>
@@ -42,7 +48,8 @@ display(HTML(data="""
 """))
 
 folder_datasets = '/Users/westerops/Desktop/cmpe/cmpe492/RE-2019-Materials/Datasets with features/' #can be an url
-filenames = ['esa-eucl-est', 'ds2', 'ds3', 'dronology', 'reqview', 'leeds', 'wasp']
+filenames = ['dronology','ds3']
+#filenames = ['esa-eucl-est', 'ds2', 'ds3', 'dronology', 'reqview', 'leeds', 'wasp']
 labels = ['ESA Euclid', 'Helpdesk', 'User mgmt', 'Dronology', 'ReqView', 'Leeds library', 'WASP']
 remove = [('dronology', 'f'),('dronology', 'oq'),('wasp', 'f'),('wasp', 'oq')]
 oversample = [('ds3', 'f'), ('ds3', 'oq')]
@@ -169,9 +176,9 @@ def make_roc_curve(appendix, target, to_drop, golds, probs, names, scores, nrfea
     # classifier = RandomForestClassifier()
     # classifier = GaussianNB()
     # classifier = KNeighborsClassifier()
-    classifier = MultinomialNB()
+    #classifier = MultinomialNB()
     # classifier = DecisionTreeClassifier()
-    # classifier = LogisticRegression()
+    classifier = LogisticRegression()
     # For fast processing
     # from sklearn.ensemble import GradientBoostingClassifier
     # classifier = GradientBoostingClassifier(random_state=42, n_estimators=30, max_depth = 5)
@@ -340,13 +347,15 @@ def make_roc_curve(appendix, target, to_drop, golds, probs, names, scores, nrfea
     #plt.savefig('roc-' + str(nrfeat) + '-' + appendix + '.pdf', dpi=300, bbox_inches='tight')
 
 
-
 class ClassifyAPIView(APIView):
 
     def post(self, request, *args, **kwargs):
 
         colorpalette = ['#000000', '#e69f00', '#56b4e9', '#009e73', '#f0e442', '#0072b2', '#d55e00', '#cc79a7']
         colors = {'Promise test': colorpalette[0]}
+        f = open("results.csv", "w+")
+        f.write("'IsFunctional' \t 'IsQuality' \t 'OnlyFunctional' \t 'OnlyQuality'\n")
+        writer = csv.writer(f, delimiter='\t')
         for i in range(0, len(filenames)):
             colors.update({labels[i]: colorpalette[i + 1]})
 
@@ -356,10 +365,18 @@ class ClassifyAPIView(APIView):
         allfiles += labels
         allresults = pd.DataFrame(allfiles, columns=['Dataset'])
 
-        feature_sets = ['FinalSel']
-
+        feature_sets = []
+        feature_set=request.data.get('feature_set',None)
+        if feature_set is None:
+            #raise ValidationError("You have to give feature set")
+            feature_set='FinalSel'
+        if feature_set != 'FinalSel':
+            raise ValidationError("Give valid featureset")
+        feature_sets.append(feature_set)
         # classify all datasets with all possible feature sets and for all target class.
         # print the results and the plots
+        return_value=[]
+        data_all = pd.read_csv(request.data['file'])
         for feature_set in feature_sets:
             for target in targets:
                 print("======== Results for feature set '" + feature_set + "' with target '" + target + "' ========")
@@ -396,13 +413,15 @@ class ClassifyAPIView(APIView):
                 # split promise in 75/25
                 train_x, test_x, train_y, test_y = split_tr_te(data, target, to_drop)
                 res = []
+                results=[]
+                results.append(target)
                 # train the classifier on the 75% of promise
                 # model = SVC(kernel='linear', C=1, random_state=0, probability=True)
                 # model = RandomForestClassifier()
                 # model = GaussianNB()
                 # model = KNeighborsClassifier()
-                model = MultinomialNB()
-                # model = LogisticRegression()
+                #model = MultinomialNB()
+                model = LogisticRegression()
                 # model = DecisionTreeClassifier()
                 scores_line, _, _ = train_classifier(model, train_x, train_y, 'Promise train')
                 # test the performances on the remaining 25
@@ -422,45 +441,46 @@ class ClassifyAPIView(APIView):
                 f1s = []
                 aucs = []
                 idx = 0
-                for filename in filenames:  # loop for all datasets
-                    print(filename)
-                    data3 = pd.read_csv(folder_datasets + filename + '-' + appendix + '.csv', engine='python')
-                    if target == 'OnlyQuality':
-                        data3['IsQuality'] = ~data3['IsFunctional'] & data3['IsQuality']
-                        target = 'IsQuality'
 
-                    if target == 'OnlyFunctional':
-                        data3['IsFunctional'] = data3['IsFunctional'] & ~data3['IsQuality']
-                        target = 'IsFunctional'
+                #print(filename)
+                data3=data_all
+                #data3 = pd.read_csv(folder_datasets + filename + '-' + appendix + '.csv', engine='python')
+                if target == 'OnlyQuality':
+                    data3['IsQuality'] = ~data3['IsFunctional'] & data3['IsQuality']
+                    target = 'IsQuality'
 
-                    data3 = drop_descriptive_columns(data3)
-                    if (filename, tag) in oversample:
-                        print('Oversampling', filename)
-                        X, y = makeOverSamplesADASYN(data3.drop(to_drop, axis=1), data3[target])
-                    else:
-                        X = data3.drop(to_drop, axis=1)
-                        y = data3[target]
-                    scores_line, svm_te, svm_pr = evaluate_classifier(model, X, y, filename)
-                    precisions.append(scores_line[1])
-                    recalls.append(scores_line[2])
-                    f1s.append(scores_line[3])
-                    aucs.append(scores_line[4])
-                    res.append(scores_line)
-                    if (filename, tag) not in remove:
-                        probs.append(svm_pr)
-                        names.append(labels[idx])
-                        auc_scores.append(scores_line[4])
-                        if (filename, tag) in oversample:
-                            golds.append(y)
-                        else:
-                            golds.append(y.values.tolist())
-                    idx = idx + 1
+                if target == 'OnlyFunctional':
+                    data3['IsFunctional'] = data3['IsFunctional'] & ~data3['IsQuality']
+                    target = 'IsFunctional'
+
+                data3 = drop_descriptive_columns(data3)
+                #if (filename, tag) in oversample:
+                #    print('Oversampling', filename)
+                #    X, y = makeOverSamplesADASYN(data3.drop(to_drop, axis=1), data3[target])
+                #else:
+                X = data3.drop(to_drop, axis=1)
+                y = data3[target]
+                scores_line, svm_te, svm_pr = evaluate_classifier(model, X, y, "filename")
+                precisions.append(scores_line[1])
+                recalls.append(scores_line[2])
+                f1s.append(scores_line[3])
+                aucs.append(scores_line[4])
+                res.append(scores_line)
+                #if (filename, tag) not in remove:
+                probs.append(svm_pr)
+                names.append(labels[idx])
+                auc_scores.append(scores_line[4])
+                #if (filename, tag) in oversample:
+                #  golds.append(y)
+                #else:
+                golds.append(y.values.tolist())
+                idx = idx + 1
 
                 res.append(['Macro-average', np.mean(precisions), np.mean(recalls), np.mean(f1s), np.mean(aucs)])
                 res.append(['Std-dev', np.std(precisions), np.std(recalls), np.std(f1s), np.std(aucs)])
 
                 print("Feature set '" + feature_set + "' Target '" + target + "' ========")
-
+                return_value.append(svm_te)
                 # display the results in the form of tables precision recall f1 auc, plots
                 #build_plot(y_true=golds, scores=probs, labels=names)
                 make_roc_curve(appendix, target, to_drop, golds, probs, names, auc_scores, '', colors)
@@ -468,11 +488,28 @@ class ClassifyAPIView(APIView):
                                                      'AUC-' + appendix])
                 #display(HTML(results.to_html()))
 
+
                 allresults = pd.merge(allresults, results, on='Dataset')
-                print('Done Innerrrr')
+                #print('Done Innerrrr')
 
             # display(HTML(allresults.to_html()))
-            print('Done Inner')
+            #print('Done Inner')
 
-        print('Done')
-        return Response(status=200)
+        #print('Done')
+        writer.writerows(zip(return_value[0], return_value[1],return_value[2],return_value[3]))
+        f.close()
+        f = open("results.csv", "r")
+        email=request.data.get('email',None)
+        if email is not None:
+            send_email_results(request.data.get('email'),f)
+            os.remove("results.csv")
+            return Response("email sended", status=200)
+        os.remove("results.csv")
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="somefilename.csv"'
+
+        writer = csv.writer(response)
+        writer.writerow(['IsFunctional', 'IsQuality', 'OnlyFunctional', 'OnlyQuality'])
+        writer.writerows(zip(return_value[0], return_value[1],return_value[2],return_value[3]))
+
+        return response

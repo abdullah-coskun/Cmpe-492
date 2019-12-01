@@ -1,5 +1,7 @@
 Notebooks/ipynb_checkpoints
 django_project/classify_api/venv
+django_project/classify_api/results.csv
+django_project/classify_api/classify/aws_key.txt
 
 /*__pycache__
 __pycache__
