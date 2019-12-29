@@ -22,4 +22,5 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('admin/', admin.site.urls),
     url(r'^classification/', include('classify.urls')),
+    url(r'^enrichment/', include('enrichment.urls')),
 ]
