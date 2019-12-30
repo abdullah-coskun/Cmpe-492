@@ -48,6 +48,9 @@ from spacy.lemmatizer import Lemmatizer
 lemmatizer = nlp.Defaults.create_lemmatizer()
 #lemmatizer = Lemmatizer(LEMMA_INDEX, LEMMA_EXC, LEMMA_RULES)
 
+
+opportunity_word_phrases = ['shall be able to', 'have opportunity to','must be able to','should be able to']
+
 def getDependenciesFeaturesSets(type):
     """
     Retrieves the set of linguistic features appropriate, based on the name of the feature set given as input.
@@ -440,18 +443,23 @@ def createEnrichedDataset(data, new_file_name, dep_feat_type):
         data['Modal'] = 0
         data['Adverb'] = 0
         data['Cardinal'] = 0
+        data['Word_Phrase'] = 0
         idx = 0
         for req in tqdm(data['RequirementText'], desc='Parse trees', position=0):
             tokens = tokenizer.tokenize(req)
             tags = nltk.pos_tag(tokens)
             fd = nltk.FreqDist(tag for (word, tag) in tags)
+            res = bool([word for word in opportunity_word_phrases if (word in req)])
+            if res:
+                print("a")
+                data.at[idx,'Word_Phrase']=1
             for key, value in fd.items():
                 # print (key + " " + str(value))
                 if key == "MD":
                     data.at[idx, 'Modal'] = value
                 if key == "RB":
                     data.at[idx, 'Adverb'] = value
-                if key == "CD":
+                #if key == "CD":
                     data.at[idx, 'Cardinal'] = value
             idx = idx + 1
 
@@ -539,7 +547,7 @@ class EnrichAPIView(APIView):
                     dataset_names]
 
         # the features to use to enrich the datasets
-        possible_dependencies_feature_sets = ['FinalSel_vlist']
+        possible_dependencies_feature_sets = ['FinalSel']
 
         # creat all enriched datasets
         for i in range(0, len(datasets)):
@@ -556,5 +564,5 @@ class EnrichAPIView(APIView):
         for line in f:
             writer.writerow([line])
 
-        os.remove("enrich_results.csv")
+        #os.remove("enrich_results.csv")
         return response

@@ -388,7 +388,7 @@ class ClassifyAPIView(APIView):
                 appendix = 'ling-' + feature_set
 
                 # read the promise dataset, it is used to train the classifier, which will be then tested on all other datasets
-                data = pd.read_csv(folder_datasets + 'promise-reclass' + '-' + appendix + '.csv', engine='python')
+                data = data_all
 
                 tag = ''
                 if target == 'IsFunctional':
