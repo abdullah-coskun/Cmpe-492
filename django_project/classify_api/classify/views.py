@@ -47,7 +47,8 @@ display(HTML(data="""
 </style>
 """))
 
-folder_datasets = '/Users/westerops/Desktop/cmpe/cmpe492/RE-2019-Materials/Datasets with features/' #can be an url
+folder_datasets = '/Users/westerops/Desktop/cmpe/cmpe492/RE-2019-Materials/django_project/classify_api/' #can be an url
+file_base='promise_finalsel_extended.csv'
 filenames = ['dronology','ds3']
 #filenames = ['esa-eucl-est', 'ds2', 'ds3', 'dronology', 'reqview', 'leeds', 'wasp']
 labels = ['ESA Euclid', 'Helpdesk', 'User mgmt', 'Dronology', 'ReqView', 'Leeds library', 'WASP']
@@ -167,7 +168,7 @@ def makeOverSamplesADASYN(X, y):
     return X, y
 
 
-def make_roc_curve(appendix, target, to_drop, golds, probs, names, scores, nrfeat, colors):
+def make_roc_curve(appendix, target, to_drop, golds, probs, names, scores, nrfeat, colors,file_test):
     """
     Generates a ROC plot (used in the paper)
     """
@@ -192,7 +193,7 @@ def make_roc_curve(appendix, target, to_drop, golds, probs, names, scores, nrfea
 
     #plt.figure(figsize=(10, 6))
 
-    dataz = pd.read_csv(folder_datasets + 'promise-reclass' + '-' + appendix + '.csv', engine='python')
+    dataz = pd.read_csv(folder_datasets + file_base, engine='python')
 
     # Attempt with project-based fold -- TODO: try another partitioning
     # projects = [[3, 9, 11], [1, 5, 12], [6, 10, 13], [1, 8, 14], [3, 10, 12], [2, 5, 11], [4, 6, 14], [7, 8, 13], [2, 9, 15], [4, 7, 15] ]
@@ -228,6 +229,7 @@ def make_roc_curve(appendix, target, to_drop, golds, probs, names, scores, nrfea
 
     print('p-fold', 'Precision', str(prec / 10.0), 'Recall', str(rec / 10.0), 'F1', str(f1 / 10.0), 'AUC',
           str(my_auc / 10.0))
+    file_test.write('p-fold Precision '+ str(prec / 10.0)+ ' Recall '+ str(rec / 10.0)+ ' F1 '+ str(f1 / 10.0)+ ' AUC '+ str(my_auc) + '\n')
 
     pmean_tpr = np.mean(ptprs, axis=0)
     pmean_tpr[-1] = 1.0
@@ -286,6 +288,7 @@ def make_roc_curve(appendix, target, to_drop, golds, probs, names, scores, nrfea
 
     print('k-fold', 'Precision', str(prec / 10.0), 'Recall', str(rec / 10.0), 'F1', str(f1 / 10.0), 'AUC',
           str(roc_auc / 10))
+    file_test.write('k-fold Precision ' + str(prec / 10.0)+ ' Recall ' + str(rec / 10.0)+ ' F1 ' + str(f1 / 10.0) + ' AUC ' + str(roc_auc) + '\n')
 
     #plt.xlim([-0.01, 1.01])
     # plt.ylim([-0.01, 1.01])
@@ -354,6 +357,7 @@ class ClassifyAPIView(APIView):
         colorpalette = ['#000000', '#e69f00', '#56b4e9', '#009e73', '#f0e442', '#0072b2', '#d55e00', '#cc79a7']
         colors = {'Promise test': colorpalette[0]}
         f = open("results.csv", "w+")
+        file_test = open("results_test.csv", "w+")
         f.write("'IsFunctional' \t 'IsQuality' \t 'OnlyFunctional' \t 'OnlyQuality'\n")
         writer = csv.writer(f, delimiter='\t')
         for i in range(0, len(filenames)):
@@ -368,6 +372,11 @@ class ClassifyAPIView(APIView):
         feature_sets = []
         feature_set=request.data.get('feature_set',None)
         type = request.data.get('type', None)
+        old = request.data.get('old', None)
+        if old == 'true':
+            file_base = 'promise_finalsel_base.csv'
+        else:
+            file_base = 'promise_finalsel_extended.csv'
         if feature_set is None:
             #raise ValidationError("You have to give feature set")
             feature_set='FinalSel'
@@ -378,7 +387,15 @@ class ClassifyAPIView(APIView):
         # print the results and the plots
         return_value=[]
         return_test_value = []
-        data_all = pd.read_csv(request.data['file'])
+        train=request.data.get('train', None)
+        if train is None:
+            data_all = pd.read_csv(request.data['file'])
+        else:
+            data_all = pd.read_csv(train)
+            test = request.data.get('test', None)
+            if test is None:
+                raise ValidationError('If you give train data you should also give test data too')
+            data_test=  pd.read_csv(train)
         for feature_set in feature_sets:
             for target in targets:
                 print("======== Results for feature set '" + feature_set + "' with target '" + target + "' ========")
@@ -388,7 +405,7 @@ class ClassifyAPIView(APIView):
                 appendix = 'ling-' + feature_set
 
                 # read the promise dataset, it is used to train the classifier, which will be then tested on all other datasets
-                data = data_all
+                data = pd.read_csv(folder_datasets+file_base, engine='python')
 
                 tag = ''
                 if target == 'IsFunctional':
@@ -429,6 +446,7 @@ class ClassifyAPIView(APIView):
                 # test the performances on the remaining 25
                 scores_line, svm_te, svm_pr = evaluate_classifier(model, test_x, test_y, 'Promise test')
                 print(scores_line)
+                file_test.write(str(scores_line)+'\n')
                 res.append(scores_line)
                 probs.append(svm_pr)
                 names.append('Promise test')
@@ -486,7 +504,7 @@ class ClassifyAPIView(APIView):
                 return_test_value.append({target:res})
                 # display the results in the form of tables precision recall f1 auc, plots
                 #build_plot(y_true=golds, scores=probs, labels=names)
-                make_roc_curve(appendix, target, to_drop, golds, probs, names, auc_scores, '', colors)
+                make_roc_curve(appendix, target, to_drop, golds, probs, names, auc_scores, '', colors,file_test)
                 results = pd.DataFrame(res, columns=['Dataset', 'Prec-' + appendix, 'Rec-' + appendix, 'F1-' + appendix,
                                                      'AUC-' + appendix])
                 #display(HTML(results.to_html()))
@@ -503,6 +521,7 @@ class ClassifyAPIView(APIView):
             return Response(return_test_value, status=200)
         writer.writerows(zip(return_value[0], return_value[1],return_value[2],return_value[3]))
         f.close()
+        file_test.close()
         f = open("results.csv", "r")
         email=request.data.get('email',None)
         if email is not None:

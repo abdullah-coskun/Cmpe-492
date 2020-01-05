@@ -49,7 +49,7 @@ lemmatizer = nlp.Defaults.create_lemmatizer()
 #lemmatizer = Lemmatizer(LEMMA_INDEX, LEMMA_EXC, LEMMA_RULES)
 
 
-opportunity_word_phrases = ['shall be able to', 'have opportunity to','must be able to','should be able to']
+opportunity_word_phrases = ['shall be able to', 'have opportunity to','must be able to','should be able to','shall display','shall allow','shall offer','must allow']
 
 def getDependenciesFeaturesSets(type):
     """
@@ -257,7 +257,7 @@ def get_all_paths(node, h, max_h):
     ]
 
 
-def createEnrichedDataset(data, new_file_name, dep_feat_type):
+def createEnrichedDataset(data, new_file_name, dep_feat_type,bool_a):
     """
     Creates a <new_file_name>.csv file with dataset data enriched with the features in dep_feat_type
     @param data: the original dataset
@@ -443,15 +443,16 @@ def createEnrichedDataset(data, new_file_name, dep_feat_type):
         data['Modal'] = 0
         data['Adverb'] = 0
         data['Cardinal'] = 0
-        data['Word_Phrase'] = 0
+        if bool_a == 'true':
+            data['Word_Phrase'] = 0
         idx = 0
         for req in tqdm(data['RequirementText'], desc='Parse trees', position=0):
             tokens = tokenizer.tokenize(req)
             tags = nltk.pos_tag(tokens)
             fd = nltk.FreqDist(tag for (word, tag) in tags)
             res = bool([word for word in opportunity_word_phrases if (word in req)])
-            if res:
-                print("a")
+            if res and bool_a == 'true':
+                print("")
                 data.at[idx,'Word_Phrase']=1
             for key, value in fd.items():
                 # print (key + " " + str(value))
@@ -543,18 +544,17 @@ class EnrichAPIView(APIView):
             print("Successfully created the directory %s " % folder_dest_datasets)
 
         dataset_names = ['promise-reclass']
-        datasets = [pd.read_csv(folder_source_datasets + dataset_name + '.csv', engine='python') for dataset_name in
-                    dataset_names]
+        datasets = [pd.read_csv(request.data['file'])]
 
         # the features to use to enrich the datasets
         possible_dependencies_feature_sets = ['FinalSel']
-
+        bool_a=request.data.get('old')
         # creat all enriched datasets
         for i in range(0, len(datasets)):
             print('Dataset: ' + dataset_names[i])
             for t in possible_dependencies_feature_sets:
                 print(t)
-                createEnrichedDataset(datasets[i], 'enrich_results.csv', t)
+                createEnrichedDataset(datasets[i], 'enrich_results.csv', t,bool_a)
 
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = 'attachment; filename="enrich_results.csv"'
