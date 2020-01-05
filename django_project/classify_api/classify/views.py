@@ -32,7 +32,6 @@ import numpy as np
 import pandas as pd
 import csv
 
-from skrules import SkopeRules
 
 # Set the ipython display in such a way that helps the visualization of the rulematrix outputs.
 from IPython.display import display, HTML

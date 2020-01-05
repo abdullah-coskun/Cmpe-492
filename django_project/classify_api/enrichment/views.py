@@ -4,9 +4,7 @@ from django.shortcuts import render
 # Create your views here.
 # Import skope-rules
 from rest_framework.views import APIView
-from skrules import SkopeRules
-# Import skope-rules
-from skrules import SkopeRules
+
 
 
 # Import libraries
