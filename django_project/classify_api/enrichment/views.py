@@ -4,7 +4,9 @@ from django.shortcuts import render
 # Create your views here.
 # Import skope-rules
 from rest_framework.views import APIView
-
+from skrules import SkopeRules
+# Import skope-rules
+from skrules import SkopeRules
 
 
 # Import libraries
@@ -31,8 +33,8 @@ from nltk.tokenize import RegexpTokenizer
 tokenizer = RegexpTokenizer(r'\w+')
 
 #Import benepar parser
-import benepar
-benepar.download('benepar_en2')
+#import benepar
+#benepar.download('benepar_en2')
 
 #Tqdm, for the progress bar
 from tqdm import tqdm
@@ -255,7 +257,7 @@ def get_all_paths(node, h, max_h):
     ]
 
 
-def createEnrichedDataset(data, new_file_name, dep_feat_type,bool_a):
+def createEnrichedDataset(data, new_file_name, dep_feat_type):
     """
     Creates a <new_file_name>.csv file with dataset data enriched with the features in dep_feat_type
     @param data: the original dataset
@@ -441,15 +443,14 @@ def createEnrichedDataset(data, new_file_name, dep_feat_type,bool_a):
         data['Modal'] = 0
         data['Adverb'] = 0
         data['Cardinal'] = 0
-        if bool_a == 'true':
-            data['Word_Phrase'] = 0
+        data['Word_Phrase'] = 0
         idx = 0
         for req in tqdm(data['RequirementText'], desc='Parse trees', position=0):
             tokens = tokenizer.tokenize(req)
             tags = nltk.pos_tag(tokens)
             fd = nltk.FreqDist(tag for (word, tag) in tags)
             res = bool([word for word in opportunity_word_phrases if (word in req)])
-            if res and bool_a == 'true':
+            if res:
                 print("")
                 data.at[idx,'Word_Phrase']=1
             for key, value in fd.items():
@@ -552,7 +553,7 @@ class EnrichAPIView(APIView):
             print('Dataset: ' + dataset_names[i])
             for t in possible_dependencies_feature_sets:
                 print(t)
-                createEnrichedDataset(datasets[i], 'enrich_results.csv', t,bool_a)
+                createEnrichedDataset(datasets[i], 'enrich_results.csv', t)
 
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = 'attachment; filename="enrich_results.csv"'
